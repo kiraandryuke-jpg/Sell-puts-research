@@ -9,35 +9,50 @@ with open("config.yaml", 'r') as f:
     config = yaml.safe_load(f)
 
 def black_scholes_put(S, K, T, r, sigma):
-    """Calculates theoretical price of a European Put."""
+    # Avoid division by zero if sigma is 0
+    if sigma <= 0: return 0
     d1 = (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma * np.sqrt(T)
     return K * np.exp(-r * T) * norm.cdf(-d2) - S * norm.cdf(-d1)
 
 def run_backtest():
-    # 1. Get Data
+    # 1. Get ALL data once
     all_tickers = config['tickers'] + [config['market_indicator']]
-    data = yf.download(all_tickers, period="2y")['Close']
+    print(f"Downloading data for: {all_tickers}")
+    df_data = yf.download(all_tickers, period="2y")
     
+    # Check if data loaded correctly
+    if df_data.empty:
+        raise ValueError("No data downloaded. Check your ticker symbols.")
+
+    # Flatten column structure if yfinance returns multi-index
+    if isinstance(df_data.columns, pd.MultiIndex):
+        df_data.columns = df_data.columns.get_level_values(1)
+
     # 2. Setup tracking
-    active_positions = [] # List of dicts: {'ticker':..., 'entry_premium':..., 'expiry_date':...}
+    active_positions = [] 
     results = []
     
     # 3. Main Loop
-    for i in range(config['strategy']['volatility_window'], len(data)):
-        current_date = data.index[i]
-        spy_open = yf.download(config['market_indicator'], start=current_date, end=current_date, progress=False)['Open'].values[0]
-        spy_close = data[config['market_indicator']].iloc[i]
+    # Iterate through the dates where we have SPY data
+    spy_data = df_data[[config['market_indicator']]]
+    
+    for i in range(config['strategy']['volatility_window'], len(df_data)):
+        current_date = df_data.index[i]
+        
+        # Get market data from pre-downloaded dataframe
+        spy_open = df_data[config['market_indicator']]['Open'].iloc[i]
+        spy_close = df_data[config['market_indicator']]['Close'].iloc[i]
         
         # Rule: SPY Red Day
         if spy_close < spy_open:
             for ticker in config['tickers']:
-                S = data[ticker].iloc[i]
+                S = df_data[ticker]['Close'].iloc[i]
                 K = S * config['strategy']['strike_offset']
-                T = config['strategy']['dte'] / 252 # Time in years
+                T = config['strategy']['dte'] / 252 
                 
-                # Calculate realized vol as proxy for sigma
-                sigma = data[ticker].iloc[i-20:i].pct_change().std() * np.sqrt(252)
+                # Calculate rolling vol
+                sigma = df_data[ticker]['Close'].iloc[i-20:i].pct_change().std() * np.sqrt(252)
                 
                 premium = black_scholes_put(S, K, T, config['strategy']['risk_free_rate'], sigma)
                 
@@ -49,10 +64,9 @@ def run_backtest():
                 })
         
         # 4. Update/Exit Check
-        for pos in active_positions[:]: # Copy list to iterate safely
-            # Theoretical price update
-            S_curr = data[pos['ticker']].iloc[i]
-            # (Simplification: using same T and sigma for daily update)
+        for pos in active_positions[:]: 
+            S_curr = df_data[pos['ticker']]['Close'].iloc[i]
+            # Use same sigma for simplicity
             current_val = black_scholes_put(S_curr, K, T, config['strategy']['risk_free_rate'], sigma)
             
             if current_val <= pos['exit_target']:
@@ -64,4 +78,6 @@ def run_backtest():
 if __name__ == "__main__":
     df = run_backtest()
     print(f"Total trades completed: {len(df)}")
-    print(f"Total PnL approximation: {df['profit'].sum():.2f}")
+    if not df.empty:
+        print(f"Total PnL: {df['profit'].sum():.2f}")
+        
