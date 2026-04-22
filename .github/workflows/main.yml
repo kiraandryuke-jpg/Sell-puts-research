@@ -1,0 +1,15 @@
+# Strategy Parameters
+strategy:
+  profit_target_pct: 0.50   # Close when option value is 50% of entry premium
+  dte: 30                   # Days to expiration
+  strike_offset: 0.95       # Strike = 95% of current price (5% OTM)
+  risk_free_rate: 0.05      # Assumed annual risk-free rate
+  volatility_window: 20     # Rolling days to calculate realized volatility
+
+# Assets
+tickers:
+  - TQQQ
+  - SOXL
+  - NVDL
+
+market_indicator: "SPY"
