@@ -12,4 +12,4 @@ tickers:
   - SOXL
   - NVDL
 
-market_indicator: "SPX"
+market_indicator: "SPY"
