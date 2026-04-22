@@ -1,0 +1,15 @@
+# Strategy Parameters
+strategy:
+  profit_target_pct: 0.50
+  dte: 30
+  strike_offset: 0.95
+  risk_free_rate: 0.05
+  volatility_window: 20
+
+# Assets
+tickers:
+  - TQQQ
+  - SOXL
+  - NVDL
+
+market_indicator: "SPY"
